@@ -52,42 +52,40 @@ def ABC_var(image, p, q, d, sC, sS):
     # ----------------------------
     # Función auxiliar: alpha local
     # ----------------------------
-    def compute_alpha_local(img, x, y, p, q):
+    def compute_alpha_local(image_norm, x, y, p, q):
         half_p, half_q = p // 2, q // 2
-        x1, x2 = max(0, x-half_p), min(img.shape[0], x+half_p+1)
-        y1, y2 = max(0, y-half_q), min(img.shape[1], y+half_q+1)
-
-        window = img[x1:x2, y1:y2]
-
+        x1, x2 = max(0, x-half_p), min(image_norm.shape[0], x+half_p+1)
+        y1, y2 = max(0, y-half_q), min(image_norm.shape[1], y+half_q+1)
+        
+        window = image_norm[x1:x2, y1:y2]
+        
         mu = np.mean(window)
+        
         sigma = np.mean(window**2) - mu**2
-
-        sigma_min = np.min(window**2 - mu**2)
-        sigma_max = np.max(window**2 - mu**2)
-
+        
+        local_var = window**2 - mu**2
+        sigma_min = np.min(local_var)
+        sigma_max = np.max(local_var)
+        
         if sigma_max - sigma_min < 1e-8:
             return 0.0
-
-        alpha = 10 * np.sqrt((sigma - sigma_min) / (sigma_max - sigma_min + 1e-8))
+        
+        alpha = np.sqrt((sigma - sigma_min) / (sigma_max - sigma_min))
         return alpha
-
-    # ----------------------------
-    # Funciones de kernel
-    # ----------------------------
+        
     def kernel_value(alpha):
-        if alpha <= 0 or alpha >= 1:
-            alpha = 0.5  # prevenir inestabilidad
         Lambda = alpha / (1 - alpha)
         M = 1 - alpha + (alpha / gamma(alpha))
         K = M / (1 - alpha)
+        
         g = gamma(alpha + 2)
-
-        p0 = K * (1 - (Lambda**(2 - alpha)) / g + (Lambda**2) * (2**(-2 * alpha)) / g)
-        p1 = K * (2 * Lambda * (2**(-2 * alpha) - 1) / g + (2 * Lambda**2) * (1 - 2**(-2 * alpha)) / g)
-        p2 = K * (Lambda * (2 - 2**(-alpha)) / g - (Lambda**2) * (2**(-2 * alpha) - 2) / g)
-
+        
+        p0 = K * (1 - (Lambda ** (2 - alpha)) / g + (Lambda ** 2) * (2 ** (-2 * alpha)) / g)
+        p1 = K * (2 * Lambda * (2 ** (-2 * alpha) - 1) / g + (2 * Lambda ** 2) * (1 - 2 ** (-2 * alpha)) / g)
+        p2 = K * (Lambda * (2 - 2 ** (-alpha)) / g - (Lambda ** 2) * (2 ** (-2 * alpha) - 2) / g)
+        
         return p0, p1, p2
-
+    
     def kernel(alpha):
         p0, p1, p2 = kernel_value(alpha)
         h_x = np.array([[-p0, 0, p0], [-p1, 0, p1], [-p2, 0, p2]])
@@ -97,30 +95,34 @@ def ABC_var(image, p, q, d, sC, sS):
     # ----------------------------
     # Cálculo del gradiente
     # ----------------------------
-    grad_x = np.zeros_like(image, dtype=np.float32)
-    grad_y = np.zeros_like(image, dtype=np.float32)
-    alpha_map = np.zeros_like(image, dtype=np.float32)
+    def compute_gradient(image_norm, p, q):
+        grad_x = np.zeros_like(image_norm, dtype=np.float32)
+        grad_y = np.zeros_like(image_norm, dtype=np.float32)
+        alpha_map = np.zeros_like(image_norm, dtype=np.float32)  # aquí guardaremos los alphas
+        
+        for x in range(1, image_norm.shape[0] - 1):
+            for y in range(1, image_norm.shape[1] - 1):
+                alpha = compute_alpha_local(image_norm, x, y, p, q)
+                alpha_map[x, y] = alpha   # guardamos el valor en la matriz
+                
+                h_x, h_y = kernel(alpha)
+                
+                patch = image_norm[x-1:x+2, y-1:y+2]
+                
+                grad_x[x, y] = np.sum(patch * h_x)
+                grad_y[x, y] = np.sum(patch * h_y)
+        
+        grad_x_filtered = cv2.bilateralFilter(grad_x, d=d, sigmaColor=sC, sigmaSpace=sS, 		borderType=cv2.BORDER_REPLICATE)
+        grad_y_filtered = cv2.bilateralFilter(grad_y, d=d, sigmaColor=sC, sigmaSpace=sS, 		borderType=cv2.BORDER_REPLICATE)
+        
+        grad_magnitude = np.sqrt(grad_x_filtered**2 + grad_y_filtered**2)
+        
+        grad_x_vis = cv2.normalize(grad_x_filtered, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        grad_y_vis = cv2.normalize(grad_y_filtered, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        grad_mag_vis = cv2.normalize(grad_magnitude, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        
+        return grad_x_vis, grad_y_vis, grad_mag_vis, alpha_map
 
-    for x in range(1, image.shape[0] - 1):
-        for y in range(1, image.shape[1] - 1):
-            alpha = compute_alpha_local(image, x, y, p, q)
-            alpha_map[x, y] = alpha
-
-            h_x, h_y = kernel(alpha)
-            patch = image[x-1:x+2, y-1:y+2]
-
-            grad_x[x, y] = np.sum(patch * h_x)
-            grad_y[x, y] = np.sum(patch * h_y)
-
-    # Filtros bilaterales
-    grad_x_filtered = cv2.bilateralFilter(grad_x, d=d, sigmaColor=sC, sigmaSpace=sS, borderType=cv2.BORDER_REPLICATE)
-    grad_y_filtered = cv2.bilateralFilter(grad_y, d=d, sigmaColor=sC, sigmaSpace=sS, borderType=cv2.BORDER_REPLICATE)
-
-    grad_magnitude = np.sqrt(grad_x_filtered**2 + grad_y_filtered**2)
-
-    # Normalización a 8 bits
-    grad_x_vis = cv2.normalize(grad_x_filtered, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    grad_y_vis = cv2.normalize(grad_y_filtered, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    grad_mag_vis = cv2.normalize(grad_magnitude, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
+    grad_x_vis, grad_y_vis, grad_mag_vis, alpha_map = compute_gradient(image, p, q)
     return grad_x_vis, grad_y_vis, grad_mag_vis, alpha_map
+	
