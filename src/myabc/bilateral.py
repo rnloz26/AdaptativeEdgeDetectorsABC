@@ -62,7 +62,7 @@ def ABC_bilateral(image, d, sC, sS):
 
         p0 = K * (1 - (Lambda**(2 - alpha)) / g + (Lambda**2) * (2**(-2 * alpha)) / g)
         p1 = K * (2 * Lambda * (2**(-2 * alpha) - 1) / g + (2 * Lambda**2) * (1 - 2**(-2 * alpha)) / g)
-        p2 = K * (Lambda * (2 - 2**(-alpha)) / g - (Lambda**2) * (2**(-2 * alpha) - 2) / g)
+        p2 = K * (-1 + Lambda * (2 - 2**(-alpha)) / g - (Lambda**2) * (2**(-2 * alpha) - 2) / g)
 
         return p0, p1, p2
 
