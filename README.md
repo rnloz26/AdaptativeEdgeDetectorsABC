@@ -149,7 +149,7 @@ plt.show()
 
 ## License
 
-The source files declare the Apache 2.0 License. It is recommended to verify that the license filename in the repository matches the one referenced in `pyproject.toml`.
+The source files declare the Apache 2.0 License.
 
 ## Suggested future improvements
 
