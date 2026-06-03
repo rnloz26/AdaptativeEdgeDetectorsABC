@@ -150,10 +150,3 @@ plt.show()
 ## License
 
 The source files declare the Apache 2.0 License.
-
-## Suggested future improvements
-
-- Add reproducible examples with sample images
-- Include automated tests
-- Add comparisons against classical edge detectors such as Sobel, Prewitt, and Canny
-- Document the mathematical background of the fractional kernel and the local `alpha` estimation
